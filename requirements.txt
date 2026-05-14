@@ -1,0 +1,21 @@
+# ── Core Framework ──────────────────────────────────
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+
+# ── Database ─────────────────────────────────────────
+sqlalchemy==2.0.35
+psycopg2-binary==2.9.9
+alembic==1.13.1
+
+# ── Pydantic / Settings ───────────────────────────────
+pydantic==2.9.2
+pydantic-settings==2.5.2
+pydantic[email]==2.9.2
+
+# ── Auth / Security (aligned with full-stack-fastapi-template) ──
+PyJWT==2.9.0          # replaces python-jose; PyPI: PyJWT
+pwdlib[argon2,bcrypt]==0.2.1   # Argon2id primary + bcrypt fallback
+python-multipart==0.0.12       # required for OAuth2PasswordRequestForm
+
+# ── Utilities ────────────────────────────────────────
+python-dotenv==1.0.1
