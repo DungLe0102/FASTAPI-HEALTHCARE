@@ -162,13 +162,20 @@ def get_active_bhyt(db: Session, patient_id: UUID) -> PatientBHYT:
     """
     today = date.today()
 
-    # Lấy thẻ BHYT mới nhất của bệnh nhân để chẩn đoán
+    # Ưu tiên thẻ đang active; nếu không có thì lấy mới nhất để báo lỗi cụ thể
     latest = (
         db.query(PatientBHYT)
-        .filter(PatientBHYT.patient_id == patient_id)
+        .filter(PatientBHYT.patient_id == patient_id, PatientBHYT.is_active == True)
         .order_by(PatientBHYT.valid_to.desc())
         .first()
     )
+    if not latest:
+        latest = (
+            db.query(PatientBHYT)
+            .filter(PatientBHYT.patient_id == patient_id)
+            .order_by(PatientBHYT.valid_to.desc())
+            .first()
+        )
 
     if not latest:
         raise HTTPException(

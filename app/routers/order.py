@@ -13,14 +13,15 @@ Luồng đặt hàng:
   4. POST /orders/check-expired — (Cron Job) hủy đơn quá 10 phút chưa thanh toán
 """
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from uuid import UUID
 
 from app.db import get_db
 from app.schemas.order import OrderCreate, OrderResponse
 from app.services import order_service
-from app.security import require_roles
+from app.security import get_current_account, require_roles
+from app.models.account import Account
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
@@ -32,10 +33,9 @@ router = APIRouter(prefix="/orders", tags=["Orders"])
     summary="Tạo đơn hàng gia hạn BHYT hoặc mua thuốc trực tuyến",
 )
 def create_order(
-    payload: OrderCreate,
-    db     : Session = Depends(get_db),
-    # Bỏ comment dưới đây để bật xác thực:
-    # _, = Depends(require_roles("PATIENT", "ADMIN"))
+    payload    : OrderCreate,
+    db         : Session = Depends(get_db),
+    current_acc: Account = Depends(get_current_account),
 ):
     """
     **Tạo đơn hàng trực tuyến — hỗ trợ 2 loại:**
@@ -83,7 +83,14 @@ def create_order(
 
     ⚠️ **Quan trọng:** Nội dung chuyển khoản phải khớp chính xác với `transfer_content`
     để webhook nhận biết và xử lý tự động.
+
+    **Phân quyền:** Bệnh nhân chỉ được tạo đơn cho chính mình; ADMIN tạo được cho mọi bệnh nhân.
     """
+    if current_acc.role == "PATIENT" and payload.patient_id != current_acc.account_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Từ chối: Bệnh nhân chỉ được tạo đơn cho hồ sơ của chính mình",
+        )
     return order_service.create_order(db, payload)
 
 
@@ -92,7 +99,10 @@ def create_order(
     response_model=dict,
     summary="[CRON] Quét và hủy đơn hàng quá 10 phút chưa thanh toán",
 )
-def check_expired_orders(db: Session = Depends(get_db)):
+def check_expired_orders(
+    db: Session = Depends(get_db),
+    _admin: Account = Depends(require_roles("ADMIN")),
+):
     """
     **[Tác vụ hệ thống — gọi định kỳ bởi Cron Job]**
 

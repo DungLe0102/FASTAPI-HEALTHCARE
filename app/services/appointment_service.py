@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 
 from app.models.appointment import Appointment
 from app.models.doctor import DoctorSchedule, Doctor
-from app.models.patient import PatientBHYT
+from app.models.patient import Patient, PatientBHYT
 from app.schemas.appointment import (
     AppointmentCreate,
     AppointmentStatusUpdate,
@@ -259,6 +259,62 @@ def mark_no_shows(db: Session) -> dict:
         count_cancelled += 1
 
     return {"no_shows": count_no_show, "cancelled_expired": count_cancelled}
+
+def get_appointments_by_patient(
+    db: Session,
+    patient_id: UUID,
+    status_filter: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 20,
+) -> dict:
+    """Danh sách cuộc hẹn của một bệnh nhân (phân trang, lọc status)."""
+    _get_or_404(db, Patient, Patient.patient_id, patient_id, "Patient")
+
+    query = db.query(Appointment).filter(Appointment.patient_id == patient_id)
+    if status_filter:
+        query = query.filter(Appointment.status == status_filter)
+
+    total = query.count()
+    appointments = (
+        query.order_by(Appointment.appointment_date.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return {"total": total, "appointments": appointments}
+
+
+def get_appointments_by_doctor(
+    db: Session,
+    doctor_id: UUID,
+    date_filter: Optional[date] = None,
+    status_filter: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 50,
+) -> dict:
+    """Danh sách cuộc hẹn của một bác sĩ (lọc theo ngày / status)."""
+    _get_or_404(db, Doctor, Doctor.doctor_id, doctor_id, "Doctor")
+
+    query = db.query(Appointment).filter(Appointment.doctor_id == doctor_id)
+    if date_filter:
+        day_start = datetime.combine(date_filter, datetime.min.time())
+        day_end = datetime.combine(date_filter, datetime.max.time())
+        query = query.filter(
+            Appointment.appointment_date >= day_start,
+            Appointment.appointment_date <= day_end,
+        )
+    if status_filter:
+        query = query.filter(Appointment.status == status_filter)
+
+    total = query.count()
+    appointments = (
+        query.order_by(Appointment.appointment_date.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return {"total": total, "appointments": appointments}
+
 
 def get_appointments_today(db: Session, doctor_id: Optional[UUID] = None) -> List[Appointment]:
     today = date.today()

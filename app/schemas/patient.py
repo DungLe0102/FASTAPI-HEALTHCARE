@@ -64,6 +64,27 @@ class PatientUpdate(BaseModel):
     cccd       : Optional[str]  = Field(None, max_length=12)
     address    : Optional[str]  = None
 
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, v):
+        if v and not re.match(r"^[0-9+\-\s]{7,20}$", v):
+            raise ValueError("Invalid phone number format")
+        return v
+
+    @field_validator("cccd")
+    @classmethod
+    def validate_cccd(cls, v):
+        if v and not re.match(r"^[0-9]{9,12}$", v):
+            raise ValueError("Invalid CCCD format")
+        return v
+
+    @field_validator("dob")
+    @classmethod
+    def validate_dob(cls, v):
+        if v and v >= date.today():
+            raise ValueError("Date of birth must be in the past")
+        return v
+
 
 class PatientResponse(PatientBase):
     patient_id : UUID
