@@ -126,7 +126,7 @@ def create_order(db: Session, payload: OrderCreate) -> OrderResponse:
     base_url = "https://img.vietqr.io/image/HDB-107704070005803-print.png"
     qr_url = f"{base_url}?amount={int(order.total_amount)}&addInfo={transfer_content}"
 
-    response = OrderResponse.from_orm(order)
+    response = OrderResponse.model_validate(order)
     response.qr_url = qr_url
     response.transfer_content = transfer_content
 

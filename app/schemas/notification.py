@@ -1,7 +1,7 @@
 from uuid import UUID
 from datetime import datetime
 from typing import Optional, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ── Notification Schemas ──────────────────────────
@@ -20,7 +20,7 @@ class NotificationResponse(NotificationCreate):
     retry_count     : int
     sent_at         : Optional[datetime]
     created_at      : datetime
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ── Support Request Schemas ───────────────────────
@@ -28,7 +28,8 @@ class NotificationResponse(NotificationCreate):
 class SupportRequestCreate(BaseModel):
     patient_id   : UUID
     request_type : str  = Field(..., max_length=50)
-    description  : Optional[str] = None
+    title        : str  = Field(..., max_length=255)
+    content      : Optional[str] = None
     priority     : Literal["LOW", "NORMAL", "HIGH", "URGENT"] = "NORMAL"
 
 class SupportRequestUpdate(BaseModel):
@@ -40,7 +41,8 @@ class SupportRequestResponse(BaseModel):
     request_id  : UUID
     patient_id  : UUID
     request_type: str
-    description : Optional[str]
+    title       : str
+    content     : Optional[str]
     assigned_to : Optional[UUID]
     priority    : str
     status      : str

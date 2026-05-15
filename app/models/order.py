@@ -1,6 +1,6 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, TIMESTAMP, Numeric, Index
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import Column, String, ForeignKey, TIMESTAMP, Numeric, Index, JSON
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db import Base
@@ -17,7 +17,7 @@ class Order(Base):
     expires_at   = Column(TIMESTAMP, nullable=False)
     
     # Store specific data like extension_months or medication list
-    order_metadata = Column(JSONB)
+    order_metadata = Column(JSON)
 
     patient = relationship("Patient")
 

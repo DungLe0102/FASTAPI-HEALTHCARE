@@ -165,12 +165,13 @@ def create_support_request(db: Session, payload: SupportRequestCreate) -> Suppor
     db.refresh(req)
 
     # 🚀 Thông báo cho Bệnh nhân đã nhận được yêu cầu
-    create_notification(db, {
-        "recipient_id": req.patient_id,
-        "title": "Yêu cầu hỗ trợ đã được tiếp nhận",
-        "content": f"Yêu cầu hỗ trợ về '{req.request_type}' của bạn đã được gửi thành công. Chúng tôi sẽ xử lý trong thời gian sớm nhất.",
-        "type": "HR_SUPPORT"
-    })
+    create_notification(db, NotificationCreate(
+        recipient_id=req.patient_id,
+        recipient_type="PATIENT",
+        title="Yêu cầu hỗ trợ đã được tiếp nhận",
+        content=f"Yêu cầu hỗ trợ về '{req.request_type}' của bạn đã được gửi thành công. Chúng tôi sẽ xử lý trong thời gian sớm nhất.",
+        notification_type="HR_SUPPORT"
+    ))
     return req
 
 def list_support_requests(
@@ -208,11 +209,12 @@ def update_support_request(
 
     # 🚀 Thông báo cho Bệnh nhân khi trạng thái thay đổi (RESOLVED/CLOSED)
     if payload.status in ("RESOLVED", "CLOSED"):
-        create_notification(db, {
-            "recipient_id": req.patient_id,
-            "title": f"Yêu cầu hỗ trợ {payload.status}",
-            "content": f"Yêu cầu hỗ trợ của bạn đã được chuyển sang trạng thái {payload.status}. Cảm ơn bạn đã phản hồi.",
-            "notification_type": "HR_SUPPORT"
-        })
+        create_notification(db, NotificationCreate(
+            recipient_id=req.patient_id,
+            recipient_type="PATIENT",
+            title=f"Yêu cầu hỗ trợ {payload.status}",
+            content=f"Yêu cầu hỗ trợ của bạn đã được chuyển sang trạng thái {payload.status}. Cảm ơn bạn đã phản hồi.",
+            notification_type="HR_SUPPORT"
+        ))
 
     return req

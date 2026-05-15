@@ -30,7 +30,8 @@ class SupportRequest(Base):
     request_id  = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     patient_id  = Column(UUID(as_uuid=True), ForeignKey("patient.patient_id", ondelete="RESTRICT"), nullable=False)
     request_type= Column(String(50), nullable=False)
-    description = Column(Text)
+    title       = Column(String(255))
+    content     = Column(Text)
     assigned_to = Column(UUID(as_uuid=True), nullable=True)   # doctor_id or staff UUID
     priority    = Column(String(10), default="NORMAL")        # LOW|NORMAL|HIGH|URGENT
     status      = Column(String(20), default="OPEN")          # OPEN|IN_PROGRESS|RESOLVED|CLOSED

@@ -1,7 +1,7 @@
 from uuid import UUID
 from datetime import date, datetime
 from typing import Optional, List, Literal
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 import re           
 
 
@@ -69,9 +69,9 @@ class PatientResponse(PatientBase):
     patient_id : UUID
     created_at : datetime
 
-    model_config = {
-        "from_attributes": True,
-        "json_schema_extra": {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
             "example": {
                 "patient_id": "c1dfb1c0-8dab-4fa8-94c9-01f33fde8b39",
                 "first_name": "Van A",
@@ -82,7 +82,7 @@ class PatientResponse(PatientBase):
                 "created_at": "2026-05-08T14:00:00Z"
             }
         }
-    }
+    )
 
 
 class PatientProfileResponse(PatientResponse):
@@ -149,9 +149,9 @@ class BHYTResponse(BHYTBase):
     check_status : str
     created_at   : datetime
 
-    model_config = {
-        "from_attributes": True,
-        "json_schema_extra": {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
             "example": {
                 "bhyt_id": "e3f7g3e2-0fcd-6ge0-b6e1-23f55fgfd851",
                 "patient_id": "c1dfb1c0-8dab-4fa8-94c9-01f33fde8b39",
@@ -161,7 +161,7 @@ class BHYTResponse(BHYTBase):
                 "valid_to": "2026-12-31"
             }
         }
-    }
+    )
 
 
 # ──────────────────────────────────────────
@@ -191,7 +191,7 @@ class ConsentResponse(BaseModel):
     ip_address   : Optional[str]
     timestamp    : datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Resolve forward refs

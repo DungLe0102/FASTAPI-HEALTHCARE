@@ -2,7 +2,7 @@ from uuid import UUID
 from decimal import Decimal
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 import re
 
 
@@ -37,7 +37,7 @@ class ClinicalServiceUpdate(BaseModel):
 
 class ClinicalServiceResponse(ClinicalServiceBase):
     service_id: UUID
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ─────────────────────────────────────────────
@@ -61,7 +61,7 @@ class RecordServiceResponse(BaseModel):
     actual_price      : Decimal
     created_at        : datetime
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ─────────────────────────────────────────────

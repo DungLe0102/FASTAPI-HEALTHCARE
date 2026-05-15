@@ -1,4 +1,6 @@
-# Hướng Dẫn Kiểm Thử Swagger UI (Phiên Bản Tinh Gọn)
+# Tài Liệu Kiểm Thử (Testing Documentation)
+
+Tài liệu này bao gồm hướng dẫn kiểm thử thủ công qua Swagger UI và hướng dẫn chạy kiểm thử tự động (Unit Tests).
 
 Tài liệu này là cẩm nang cầm tay chỉ việc, hướng dẫn bạn cách sử dụng giao diện Swagger (`http://localhost:8000/docs`) để test từng chức năng của hệ thống. 
 Hệ thống đã được thiết kế tinh gọn với 2 vai trò duy nhất: **ADMIN** (Quản trị toàn quyền) và **PATIENT** (Bệnh nhân người dùng cuối).
@@ -90,6 +92,11 @@ Hệ thống đã được thiết kế tinh gọn với 2 vai trò duy nhất: 
 ```
 - **Output (201)**: Sinh ra `room_id`. *Copy mã này để xếp lịch.*
 
+### 2.3. Vô hiệu hóa Khoa/Phòng (Soft Delete) (`DELETE /api/v1/departments/{department_id}`)
+*Cập nhật mới:* Test tính năng vô hiệu hóa (Soft-Delete) vừa được vá lỗi.
+- **Input**: Nhập `department_id`.
+- **Output (200)**: Thuộc tính `is_active` sẽ chuyển thành `False`. Hệ thống cũng sẽ chặn việc tạo thêm Phòng khám (`ROOM`) mới nằm trong khoa đã bị vô hiệu hóa này (Trả về 400 Bad Request).
+
 ---
 
 ## 3. MODULE BÁC SĨ VÀ LỊCH LÀM VIỆC (ADMIN)
@@ -107,6 +114,7 @@ Hệ thống đã được thiết kế tinh gọn với 2 vai trò duy nhất: 
 }
 ```
 - **Output (201)**: Lưu lại `doctor_id`.
+*Lưu ý (Cập nhật)*: Hệ thống vừa được bổ sung lớp khiên bảo vệ. Nếu bạn cố tình nhập sai `department_id`, API sẽ trả về `404 Not Found` (Khoa không tồn tại) thay vì quăng lỗi DB `500 Internal Server Error` như trước đây!
 
 ### 3.2. Cài đặt lịch làm việc cho bác sĩ (`POST /api/v1/schedules`)
 - **Input**: 
@@ -295,3 +303,33 @@ Hệ thống đã được thiết kế tinh gọn với 2 vai trò duy nhất: 
 }
 ```
 - **Output (201)**: Tương tự như gia hạn BHYT, sinh ra mã QR. Hủy tự động sau 10 phút nếu không thanh toán.
+
+---
+
+## 9. KIỂM THỬ TỰ ĐỘNG (AUTOMATED UNIT TESTS)
+
+Ngoài việc test thủ công trên Swagger, hệ thống đã được trang bị bộ Unit Test để đảm bảo tính ổn định của logic nghiệp vụ.
+
+### 9.1. Cách chạy test
+Mở terminal tại thư mục gốc của dự án và chạy lệnh sau:
+```powershell
+python -m unittest discover tests
+```
+
+### 9.2. Cấu trúc bộ test
+- **`tests/test_security.py`**: Kiểm tra logic mã hóa mật khẩu và tạo Token JWT.
+- **`tests/test_services/`**: Kiểm tra logic nghiệp vụ (Services):
+    - `test_department.py`: Logic Khoa/Phòng và khởi tạo chuẩn.
+    - `test_doctor.py`: Logic quản lý Bác sĩ và Lịch khám.
+    - `test_patient.py`: Logic Bệnh nhân và thẻ BHYT.
+    - `test_appointment.py`: Quy trình đặt lịch và State Machine.
+    - `test_medical_record.py`: Hồ sơ bệnh án và ký số SHA-256.
+    - `test_billing.py`: Hóa đơn, thanh toán và Webhook VietQR.
+    - `test_inventory_order.py`: Quản lý kho thuốc (FIFO) và đơn hàng Pharmacy/BHYT.
+    - `test_notification.py`: Hệ thống thông báo và hỗ trợ (Support Request).
+- **`tests/test_api/`**: Kiểm tra các đầu API thực tế (Integration Tests):
+    - `test_department_api.py`: Tương tác API Khoa/Phòng.
+
+### 9.3. Lưu ý kỹ thuật
+- Toàn bộ test sử dụng **SQLite in-memory**, vì vậy nó sẽ **không ảnh hưởng** đến dữ liệu thật trong database Postgres của bạn.
+- Mỗi khi chạy test, một database ảo mới sẽ được tạo ra và xóa đi ngay sau khi hoàn thành.

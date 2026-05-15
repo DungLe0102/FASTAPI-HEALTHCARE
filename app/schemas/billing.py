@@ -2,7 +2,7 @@ from uuid import UUID
 from decimal import Decimal
 from datetime import datetime, date
 from typing import Optional, List, Literal
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, ConfigDict
 
 
 # ── SCHEMAS ───────────────────────────────────────
@@ -32,7 +32,7 @@ class BillingResponse(BaseModel):
     patient_paid_amount : Decimal
     billing_status      : str
     created_at          : datetime
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PaymentCreate(BaseModel):
@@ -55,7 +55,7 @@ class PaymentResponse(BaseModel):
     gateway_reference_id : Optional[str]
     transaction_status   : str
     payment_date         : Optional[datetime]
-    model_config = {"from_attributes": True} 
+    model_config = ConfigDict(from_attributes=True)
 
 # ── VIETQR SCHEMAS ────────────────────────────────
 
@@ -111,7 +111,7 @@ class DoctorPayoutRead(DoctorPayoutBase):
     status     : str
     created_at : datetime
     
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DoctorEarningsCalculate(BaseModel):

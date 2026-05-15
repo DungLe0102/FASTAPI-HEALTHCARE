@@ -9,7 +9,7 @@ alembic==1.13.1
 
 # ── Pydantic / Settings ───────────────────────────────
 pydantic==2.9.2
-pydantic-settings==2.5.2
+pydantic-settings==2.5.2      
 pydantic[email]==2.9.2
 
 # ── Auth / Security (aligned with full-stack-fastapi-template) ──

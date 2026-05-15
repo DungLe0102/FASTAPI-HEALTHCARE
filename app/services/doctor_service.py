@@ -59,6 +59,9 @@ def get_doctor_by_id(db: Session, doctor_id: UUID) -> Doctor:
 
 
 def create_doctor(db: Session, payload: DoctorCreate) -> Doctor:
+    if payload.department_id:
+        from app.services.department_service import get_department_by_id
+        get_department_by_id(db, payload.department_id)
     doctor = Doctor(**payload.model_dump())
     db.add(doctor)
     db.commit()
@@ -68,7 +71,13 @@ def create_doctor(db: Session, payload: DoctorCreate) -> Doctor:
 
 def update_doctor(db: Session, doctor_id: UUID, payload: DoctorUpdate) -> Doctor:
     doctor = get_doctor_by_id(db, doctor_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    
+    update_data = payload.model_dump(exclude_unset=True)
+    if "department_id" in update_data and update_data["department_id"]:
+        from app.services.department_service import get_department_by_id
+        get_department_by_id(db, update_data["department_id"])
+
+    for field, value in update_data.items():
         setattr(doctor, field, value)
     db.commit()
     db.refresh(doctor)

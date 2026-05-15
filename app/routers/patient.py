@@ -68,7 +68,7 @@ def create_my_profile(
     Mỗi tài khoản chỉ tạo hồ sơ được 1 lần. Dùng `PATCH /patients/me/profile` để cập nhật.
     """
     existing = db.query(Patient).filter(Patient.patient_id == current_acc.account_id).first()
-    if existing and existing.first_name != "Patient":
+    if existing and existing.first_name and existing.last_name:
         raise HTTPException(status_code=400, detail="Hồ sơ đã tồn tại. Dùng PATCH /patients/me/profile để cập nhật.")
     return patient_service.create_patient(db, payload, patient_id=current_acc.account_id)
 

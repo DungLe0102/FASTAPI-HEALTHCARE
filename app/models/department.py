@@ -11,6 +11,7 @@ class Department(Base):
     department_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     department_code = Column(String(20), unique=True, nullable=False)
     department_name = Column(String(100), nullable=False)
+    is_active = Column(Boolean, default=True)
 
     # Relationships
     rooms = relationship("Room", back_populates="department", lazy="select")

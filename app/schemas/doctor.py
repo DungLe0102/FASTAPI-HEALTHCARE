@@ -1,7 +1,7 @@
 from uuid import UUID
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, ConfigDict
 
 
 # ──────────────────────────────────────────
@@ -9,12 +9,13 @@ from pydantic import BaseModel, Field, model_validator
 # ──────────────────────────────────────────
 
 class DoctorBase(BaseModel):
-    first_name     : str           = Field(..., max_length=100, examples=["Tran"])
-    last_name      : str           = Field(..., max_length=100, examples=["Van B"])
-    specialization : str           = Field(..., max_length=100, examples=["Cardiology"])
-    department_id  : Optional[UUID] = None
-    is_active      : bool           = True
-    is_simulator   : bool           = False
+    first_name              : str           = Field(..., max_length=100, examples=["Tran"])
+    last_name               : str           = Field(..., max_length=100, examples=["Van B"])
+    specialization          : str           = Field(..., max_length=100, examples=["Cardiology"])
+    department_id           : Optional[UUID] = None
+    hourly_consultation_fee : int           = Field(0, ge=0)
+    is_active               : bool           = True
+    is_simulator            : bool           = False
 
 
 class DoctorCreate(DoctorBase):
@@ -32,7 +33,7 @@ class DoctorUpdate(BaseModel):
 class DoctorResponse(DoctorBase):
     doctor_id: UUID
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DoctorWithSchedules(DoctorResponse):
@@ -86,7 +87,7 @@ class ScheduleResponse(ScheduleBase):
     current_booked : int
     status         : str
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ScheduleAvailabilityResponse(BaseModel):

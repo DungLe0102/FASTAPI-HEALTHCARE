@@ -1,6 +1,6 @@
 from uuid import UUID
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ──────────────────────────────────────────
@@ -10,20 +10,17 @@ from pydantic import BaseModel, Field
 class DepartmentBase(BaseModel):
     department_code: str = Field(..., max_length=20, examples=["CARD"])
     department_name: str = Field(..., max_length=100, examples=["Cardiology"])
-
-
-class DepartmentCreate(DepartmentBase):
-    pass
+    is_active: Optional[bool] = True
 
 
 class DepartmentUpdate(BaseModel):
-    department_name: Optional[str] = Field(None, max_length=100)
+    department_name: Optional[str] = Field(None, max_length=100, description="Chỉ có thể đổi tên hiển thị. Mã khoa (department_code) không được thay đổi.")
 
 
 class DepartmentResponse(DepartmentBase):
     department_id: UUID
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DepartmentWithRooms(DepartmentResponse):
@@ -41,7 +38,7 @@ class RoomBase(BaseModel):
 
 
 class RoomCreate(RoomBase):
-    department_id: UUID
+    department_id: Optional[UUID] = None  # Được inject từ URL path, không cần truyền trong body
 
 
 class RoomUpdate(BaseModel):
