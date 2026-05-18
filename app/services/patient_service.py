@@ -57,6 +57,7 @@ def create_patient(db: Session, payload: PatientCreate, patient_id: Optional[UUI
     # 🛑 KIỂM TRA TRỰC TIẾP: Tránh nhầm lẫn IntegrityError với các trường unique khác (như Email/CCCD)
     if payload.phone:
         existing = db.query(Patient).filter(Patient.phone == payload.phone).first()
+        # SELECT * FROM patients WHERE phone = payload.phone
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,

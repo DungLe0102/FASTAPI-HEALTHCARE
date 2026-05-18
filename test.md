@@ -4,6 +4,7 @@ Tài liệu này bao gồm hướng dẫn kiểm thử thủ công qua Swagger U
 
 Tài liệu này là cẩm nang cầm tay chỉ việc, hướng dẫn bạn cách sử dụng giao diện Swagger (`http://localhost:8000/docs`) để test từng chức năng của hệ thống. 
 Hệ thống đã được thiết kế tinh gọn với 2 vai trò duy nhất: **ADMIN** (Quản trị toàn quyền) và **PATIENT** (Bệnh nhân người dùng cuối).
+ Run Command: `python -m uvicorn app.main:app --reload`
 
 ## Quy ước các Mã Trạng Thái (Status Code)
 - **200 OK / 201 Created**: Thành công! (201 thường là khi tạo mới một dữ liệu).

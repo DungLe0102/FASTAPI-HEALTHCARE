@@ -85,9 +85,36 @@ def update_doctor(db: Session, doctor_id: UUID, payload: DoctorUpdate) -> Doctor
 
 
 def deactivate_doctor(db: Session, doctor_id: UUID) -> Doctor:
-    """Soft-delete: set is_active=False instead of deleting."""
+    """Soft-delete: set is_active=False instead of deleting. Also cancel all future schedules and appointments."""
     doctor = get_doctor_by_id(db, doctor_id)
     doctor.is_active = False
+
+    # 1. Hủy tất cả lịch mở (AVAILABLE) trong tương lai
+    now = datetime.now()
+    future_schedules = db.query(DoctorSchedule).filter(
+        DoctorSchedule.doctor_id == doctor_id,
+        DoctorSchedule.start_time > now,
+        DoctorSchedule.status == "AVAILABLE"
+    ).all()
+    for sch in future_schedules:
+        sch.status = "CANCELLED"
+
+    # 2. Hủy các cuộc hẹn (SCHEDULED) trong tương lai
+    from app.models.appointment import Appointment
+    from app.services.appointment_service import update_status
+    from app.schemas.appointment import AppointmentStatusUpdate
+    future_appointments = db.query(Appointment).filter(
+        Appointment.doctor_id == doctor_id,
+        Appointment.appointment_date > now,
+        Appointment.status.in_(["SCHEDULED", "PENDING_PAYMENT"])
+    ).all()
+
+    for appt in future_appointments:
+        if appt.status == "SCHEDULED":
+            update_status(db, appt.appointment_id, AppointmentStatusUpdate(status="CANCELLED"))
+        elif appt.status == "PENDING_PAYMENT":
+            update_status(db, appt.appointment_id, AppointmentStatusUpdate(status="CANCELLED"))
+
     db.commit()
     db.refresh(doctor)
     return doctor
@@ -156,8 +183,10 @@ def get_schedule_by_id(db: Session, schedule_id: UUID) -> DoctorSchedule:
 
 
 def create_schedule(db: Session, payload: ScheduleCreate) -> DoctorSchedule:
-    # Validate doctor + room exist
-    get_doctor_by_id(db, payload.doctor_id)
+    # Validate doctor + room exist and LOCK doctor to prevent concurrent schedule overlaps
+    doctor = db.query(Doctor).filter(Doctor.doctor_id == payload.doctor_id).with_for_update().first()
+    if not doctor:
+        raise HTTPException(status_code=404, detail="Doctor not found")
     _check_room_exists(db, payload.room_id)
 
     # Anti double-booking check (overlap, not just exact start_time)
@@ -184,6 +213,8 @@ def update_schedule(
     payload    : ScheduleUpdate,
 ) -> DoctorSchedule:
     schedule = get_schedule_by_id(db, schedule_id)
+    # LOCK doctor to prevent concurrent schedule overlaps
+    doctor = db.query(Doctor).filter(Doctor.doctor_id == schedule.doctor_id).with_for_update().first()
 
     if schedule.status == "CANCELLED":
         raise HTTPException(
@@ -216,7 +247,9 @@ def update_schedule(
 
 
 def cancel_schedule(db: Session, schedule_id: UUID) -> DoctorSchedule:
-    schedule = get_schedule_by_id(db, schedule_id)
+    schedule = db.query(DoctorSchedule).filter(DoctorSchedule.schedule_id == schedule_id).with_for_update().first()
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
     if schedule.current_booked > 0:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

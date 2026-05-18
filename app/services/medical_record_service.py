@@ -162,11 +162,15 @@ def create_record(db: Session, payload: MedicalRecordCreate) -> MedicalRecord:
         )
         db.add(rs)
 
-    # 5. Tự động chuyển trạng thái cuộc hẹn sang COMPLETED (hoặc PENDING_PAYMENT tùy workflow)
-    # appt.status = "COMPLETED" 
+    # 5. Tự động chuyển trạng thái cuộc hẹn sang COMPLETED
+    appt.status = "COMPLETED" 
 
-    db.commit()
-    db.refresh(record)
+    try:
+        db.commit()
+        db.refresh(record)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Medical record already exists for this appointment")
 
     # 🚀 Thông báo cho Bệnh nhân về kết quả khám
     from app.services import notification_service

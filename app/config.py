@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     # ── Database ───────────────────────────────────────
     DATABASE_URL: str = "postgresql://postgres:1234@localhost:5432/healthcare"
 
+    # ── Redis ──────────────────────────────────────────
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def REDIS_URL(self) -> str:
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/0"
+
     # ── CORS ───────────────────────────────────────────
     BACKEND_CORS_ORIGINS: Annotated[
         list[AnyUrl] | str, BeforeValidator(_parse_cors)

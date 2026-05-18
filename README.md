@@ -79,14 +79,29 @@ cp .env.example .env
 ```
 *Lưu ý: Bạn cần cấu hình `DATABASE_URL` để kết nối tới PostgreSQL, và `VIETQR_SECRET_KEY` nếu muốn dùng tính năng thanh toán.*
 
-### 4. Khởi tạo Database (Migrations)
+### 4. Cài đặt và chạy Redis (Bắt buộc)
+Hệ thống sử dụng Redis cho Rate Limiting và Background Tasks.
+- Mở một terminal mới tại thư mục gốc của dự án và khởi động Redis bằng file `.exe` đã được tải sẵn:
+```bash
+.\redis-bin\redis-server.exe
+```
+
+### 5. Khởi tạo Database (Migrations)
 ```bash
 alembic upgrade head
 ```
 
-### 5. Khởi động Server
+### 6. Khởi động Server & Worker
+Bạn cần mở 2 terminal để chạy hệ thống:
+
+**Terminal 1: FastAPI Server**
 ```bash
 fastapi dev app/main.py
+```
+
+**Terminal 2: Background Worker (ARQ)**
+```bash
+arq app.worker.WorkerSettings
 ```
 > 🎉 **Swagger UI:** `http://localhost:8000/docs`
 

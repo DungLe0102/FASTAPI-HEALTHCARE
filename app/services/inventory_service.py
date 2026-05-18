@@ -109,7 +109,9 @@ def add_inventory_batch(db: Session, payload: InventoryCreate) -> Inventory:
     return batch
 
 def adjust_inventory(db: Session, inventory_id: UUID, payload: InventoryAdjust) -> Inventory:
-    inv = _404(db, Inventory, Inventory.inventory_id, inventory_id, "Inventory")
+    inv = db.query(Inventory).filter(Inventory.inventory_id == inventory_id).with_for_update().first()
+    if not inv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Inventory '{inventory_id}' not found")
     
     new_qty = inv.quantity + payload.delta
     if new_qty < 0:
@@ -137,13 +139,14 @@ def get_prescription(db: Session, prescription_id: UUID) -> Prescription:
     """Hàm bổ sung để sửa lỗi undefined"""
     return _404(db, Prescription, Prescription.prescription_id, prescription_id, "Prescription")
 
-def _deduct_stock(db: Session, medication_id: UUID, qty_needed: int):
+def _deduct_stock(db: Session, medication_id: UUID, qty_needed: int) -> list:
     """
     Kiểm tra và trừ số lượng thuốc tồn kho theo nguyên tắc FIFO (nhập trước xuất trước).
     Nếu không đủ thuốc -> trả lỗi ngay.
+    Trả về danh sách các batch và số lượng đã trừ để có thể hoàn lại chính xác.
     """
     if qty_needed <= 0:
-        return # Không cần trừ nếu số lượng là 0
+        return [] # Không cần trừ nếu số lượng là 0
     today = date.today()
     med = db.query(Medication).filter(Medication.medication_id == medication_id).first()
     #SELECT * FROM inventory JOIN medication ON inventory.medication_id = medication.medication_id WHERE medication.is_active = true;
@@ -165,12 +168,51 @@ def _deduct_stock(db: Session, medication_id: UUID, qty_needed: int):
         )
 
     remaining = qty_needed
+    deducted_batches = []
     for batch in batches:
-        if remaining <= 0:
+        if qty_needed == 0:
             break
-        deduct = min(batch.quantity, remaining)
+        
+        deduct = min(batch.quantity, qty_needed)
         batch.quantity -= deduct
-        remaining -= deduct
+        qty_needed -= deduct
+        deducted_batches.append({"inventory_id": str(batch.inventory_id), "quantity": deduct})
+        
+    return deducted_batches
+
+
+def _restore_stock(db: Session, medication_id: UUID, qty_to_restore: int, deducted_batches: list = None):
+    """
+    Trọng tài: Hoàn trả số lượng thuốc về kho (dùng cho Inventory Reservation).
+    Sử dụng deducted_batches để cộng lại đúng lô bị trừ (đảm bảo đúng FIFO hạn sử dụng).
+    Nếu không có (đơn cũ), dùng lô có hạn xa nhất làm fallback.
+    """
+    if qty_to_restore <= 0:
+        return
+        
+    if deducted_batches:
+        for b_info in deducted_batches:
+            inv_id = UUID(b_info["inventory_id"])
+            qty = b_info["quantity"]
+            batch = db.query(Inventory).filter(Inventory.inventory_id == inv_id).with_for_update().first()
+            if batch:
+                batch.quantity += qty
+        return
+
+    today = date.today()
+    # Fallback cho đơn hàng cũ: Tìm lô hàng còn hạn ưu tiên lô gần hết hạn để cộng vào (hoặc lô mới nhất tùy chiến lược)
+    # Ở đây ta ưu tiên lô còn hiệu lực có ngày hết hạn xa nhất để tránh thuốc bị vứt bỏ.
+    batch = db.query(Inventory).filter(
+        Inventory.medication_id == medication_id,
+        Inventory.expiration_date >= today
+    ).order_by(Inventory.expiration_date.desc()).with_for_update().first()
+    
+    if batch:
+        batch.quantity += qty_to_restore
+    else:
+        # Nếu không còn lô nào (rất hiếm), tạo tạm lô fallback hoặc log lỗi.
+        # Tạm thời throw 500 hoặc bỏ qua.
+        pass
 
 def create_prescription(db: Session, payload: PrescriptionCreate) -> Prescription:
     if not payload.items:
@@ -195,7 +237,9 @@ def create_prescription(db: Session, payload: PrescriptionCreate) -> Prescriptio
     db.add(rx)
     db.flush() 
 
-    for item in payload.items:
+    # Sort items by medication_id to prevent database deadlocks when locking inventory rows concurrently
+    sorted_items = sorted(payload.items, key=lambda x: str(x.medication_id))
+    for item in sorted_items:
         _deduct_stock(db, item.medication_id, item.quantity)
         
         db.add(PrescriptionItem(

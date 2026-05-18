@@ -95,6 +95,21 @@ def get_billing(
 
 
 @router.get(
+    "/patients/me/invoices",
+    response_model=List[BillingResponse],
+    summary="[PATIENT] Xem danh sách hóa đơn của bản thân",
+)
+def list_my_billings(
+    db         : Session = Depends(get_db),
+    current_acc: Account = Depends(require_roles("PATIENT")),
+):
+    """
+    **[Chỉ BỆNH NHÂN]** Xem danh sách tất cả hóa đơn của bản thân.
+    """
+    return svc.list_billings_by_patient(db, current_acc.account_id)
+
+
+@router.get(
     "/appointments/{appointment_id}/billing",
     response_model=BillingResponse,
     summary="Tìm hóa đơn theo ID cuộc hẹn",
@@ -261,9 +276,7 @@ def refund_vietqr(
     """
     return svc.refund_vietqr_transaction(
         db, 
-        payload.transaction_id, 
-        payload.amount, 
-        payload.content
+        payload
     )
 
 

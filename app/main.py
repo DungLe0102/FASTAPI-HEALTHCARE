@@ -12,6 +12,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
+import redis.asyncio as redis
+from fastapi_limiter import FastAPILimiter
 
 from app.config import settings
 from app.db import Base, engine
@@ -30,6 +32,7 @@ from app.routers.inventory import router as inventory_router
 from app.routers.billing import router as billing_router
 from app.routers.notification import router as notification_router
 from app.routers.audit import router as audit_router
+from app.routers.websocket import router as websocket_router
 
 
 # ── Unique operationId generator (same as template) ──────────────────────────
@@ -66,7 +69,22 @@ async def lifespan(app: FastAPI):
             db.commit()
             print(f"Created FIRST_SUPERUSER: {admin_email}")
 
+    # Initialize Redis for Rate Limiting
+    try:
+        redis_connection = redis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
+        # Test connection
+        await redis_connection.ping()
+        await FastAPILimiter.init(redis_connection)
+        print("Redis connected successfully.")
+    except Exception as e:
+        print(f"WARNING: Could not connect to Redis at {settings.REDIS_URL}. Rate limiting will not work.")
+        redis_connection = None
+
     yield
+    # Shutdown logic
+    if redis_connection:
+        await redis_connection.close()
+
 
 
 # ── App factory ───────────────────────────────────────────────────────────────
@@ -99,6 +117,7 @@ app.add_middleware(
 PREFIX = settings.API_V1_STR
 
 from app.routers.order import router as order_router
+from app.routers.report import router as report_router
 
 # Workflow Order: Auth -> Setup -> Clinical -> Patient -> Appointment -> Billing -> Records -> System
 app.include_router(auth_router,           prefix=PREFIX)
@@ -112,6 +131,8 @@ app.include_router(inventory_router,      prefix=PREFIX)
 app.include_router(notification_router,   prefix=PREFIX)
 app.include_router(audit_router,          prefix=PREFIX)
 app.include_router(order_router,          prefix=PREFIX)
+app.include_router(report_router,         prefix=PREFIX)
+app.include_router(websocket_router,      prefix=PREFIX)
 
 
 

@@ -27,8 +27,8 @@ class PatientBase(BaseModel):
     @field_validator("cccd")
     @classmethod
     def validate_cccd(cls, v):
-        if v and not re.match(r"^[0-9]{9,12}$", v):
-            raise ValueError("Invalid CCCD format")
+        if v and not re.match(r"^([0-9]{9}|[0-9]{12})$", v):
+            raise ValueError("Invalid CCCD format: Must be exactly 9 or 12 digits")
         return v    
 
     @field_validator("dob")
@@ -74,8 +74,8 @@ class PatientUpdate(BaseModel):
     @field_validator("cccd")
     @classmethod
     def validate_cccd(cls, v):
-        if v and not re.match(r"^[0-9]{9,12}$", v):
-            raise ValueError("Invalid CCCD format")
+        if v and not re.match(r"^([0-9]{9}|[0-9]{12})$", v):
+            raise ValueError("Invalid CCCD format: Must be exactly 9 or 12 digits")
         return v
 
     @field_validator("dob")

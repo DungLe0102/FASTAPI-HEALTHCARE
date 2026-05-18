@@ -15,6 +15,7 @@ Luồng đặt hàng:
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from typing import List
 from uuid import UUID
 
 from app.db import get_db
@@ -24,6 +25,21 @@ from app.security import get_current_account, require_roles
 from app.models.account import Account
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
+
+
+@router.get(
+    "/",
+    response_model=List[OrderResponse],
+    summary="[ADMIN] Liệt kê danh sách đơn hàng",
+)
+def list_orders(
+    db: Session = Depends(get_db),
+    _admin: Account = Depends(require_roles("ADMIN")),
+):
+    """
+    **[Chỉ ADMIN]** Xem danh sách toàn bộ đơn hàng trong hệ thống.
+    """
+    return order_service.get_orders(db)
 
 
 @router.post(

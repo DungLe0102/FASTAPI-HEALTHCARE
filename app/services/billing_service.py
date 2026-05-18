@@ -1,3 +1,4 @@
+from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime, date
 from uuid import UUID
@@ -18,6 +19,7 @@ from app.schemas.billing import (
     PaymentCreate, 
     PaymentStatusUpdate, 
     VietQRWebhookPayload,
+    VietQRRefundRequest,
     DoctorPayoutCreate,
     DoctorPayoutUpdate
 )
@@ -71,6 +73,15 @@ def create_billing(db: Session, payload: BillingCreate) -> Billing:
     db.commit()
     db.refresh(bill)
     return bill
+
+def list_billings(db: Session, skip: int = 0, limit: int = 100, status: str = None) -> List[Billing]:
+    query = db.query(Billing)
+    if status:
+        query = query.filter(Billing.billing_status == status)
+    return query.offset(skip).limit(limit).all()
+
+def list_billings_by_patient(db: Session, patient_id: UUID) -> List[Billing]:
+    return db.query(Billing).join(Appointment).filter(Appointment.patient_id == patient_id).all()
 
 def get_billing(db: Session, billing_id: UUID) -> Billing:
     return _404(db, Billing, Billing.billing_id, billing_id, "Billing")
@@ -131,7 +142,11 @@ def update_payment_status(db: Session, transaction_id: UUID, payload: PaymentSta
     txn.payment_date         = datetime.now()
 
     if payload.transaction_status == "SUCCESS":
-        bill = get_billing(db, txn.billing_id)
+        # Lock hóa đơn để tránh Race Condition khi có nhiều giao dịch đồng thời
+        bill = db.query(Billing).filter(Billing.billing_id == txn.billing_id).with_for_update().first()
+        if not bill:
+            raise HTTPException(status_code=404, detail="Billing not found")
+
         # Tính toán tổng tiền đã thanh toán thành công.
         # Lưu ý: t.amount của txn hiện tại đã được tính trong bill.transactions do session identity map.
         paid_total = sum(
@@ -147,8 +162,8 @@ def update_payment_status(db: Session, transaction_id: UUID, payload: PaymentSta
             if appt.status == "PENDING_PAYMENT":
                 appt.status = "SCHEDULED"
                 appt.locked_until = None
-            elif appt.status in ("CANCELLED", "NO_SHOW"):
-                # Thanh toán đến muộn sau khi lịch đã bị hủy (hết 10 phút)!
+            elif appt.status == "CANCELLED" and appt.appointment_date > datetime.now():
+                # Thanh toán đến muộn sau khi lịch đã bị hủy (hết 10 phút) nhưng vẫn chưa tới giờ khám!
                 from app.models.doctor import DoctorSchedule
                 schedule = db.query(DoctorSchedule).filter(DoctorSchedule.schedule_id == appt.schedule_id).with_for_update().first()
                 if schedule and schedule.current_booked < schedule.max_patients:
@@ -314,28 +329,30 @@ def check_vietqr_transaction(db: Session, transaction_id: UUID) -> dict:
     except requests.RequestException as e:
         raise HTTPException(status_code=500, detail=f"VietQR API Error: {str(e)}")
 
-def refund_vietqr_transaction(db: Session, transaction_id: UUID, amount: Decimal, content: str) -> dict:
-    """Gọi API Refund của VietQR"""
-    txn = _404(db, PaymentTransaction, PaymentTransaction.transaction_id, transaction_id, "Transaction")
+def refund_vietqr_transaction(db: Session, payload_req: VietQRRefundRequest) -> dict:
+    """Gọi API Refund của VietQR (Thực tế là Payout tới tài khoản bệnh nhân)"""
+    txn = _404(db, PaymentTransaction, PaymentTransaction.transaction_id, payload_req.transaction_id, "Transaction")
     if txn.transaction_status != "SUCCESS":
         raise HTTPException(status_code=400, detail="Can only refund SUCCESS transactions")
     if not txn.gateway_reference_id:
         raise HTTPException(status_code=400, detail="Transaction has no gateway reference id")
 
     # 1. Gọi check-order (tùy chọn nhưng khuyến nghị)
-    check_vietqr_transaction(db, transaction_id)
+    check_vietqr_transaction(db, payload_req.transaction_id)
 
     # 2. Tạo Checksum cho API Refund
-    amount_str = str(int(amount)) # Thường amount là chuỗi số nguyên
-    raw_str = f"{settings.VIETQR_SECRET_KEY}{txn.gateway_reference_id}{amount_str}{settings.VIETQR_ACCOUNT_NO}"
+    amount_str = str(int(payload_req.amount)) # Thường amount là chuỗi số nguyên
+    raw_str = f"{settings.VIETQR_SECRET_KEY}{txn.gateway_reference_id}{amount_str}{payload_req.target_account_no}"
     checksum = hashlib.md5(raw_str.encode('utf-8')).hexdigest()
 
+    # Chuyển tiền tới tài khoản của bệnh nhân
     payload = {
-        "bankCode": settings.VIETQR_BANK_ID,
-        "bankAccount": settings.VIETQR_ACCOUNT_NO,
+        "bankCode": payload_req.target_bank_code,
+        "bankAccount": payload_req.target_account_no,
+        "accountName": payload_req.target_account_name,
         "referenceNumber": txn.gateway_reference_id,
         "amount": amount_str,
-        "content": content,
+        "content": payload_req.content,
         "checkSum": checksum
     }
 

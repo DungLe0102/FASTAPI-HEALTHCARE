@@ -19,3 +19,8 @@ python-multipart==0.0.12       # required for OAuth2PasswordRequestForm
 
 # ── Utilities ────────────────────────────────────────
 python-dotenv==1.0.1
+
+# ── Redis & Background Tasks ────────────────────────
+redis==5.0.8
+arq==0.26.1
+fastapi-limiter==0.1.6

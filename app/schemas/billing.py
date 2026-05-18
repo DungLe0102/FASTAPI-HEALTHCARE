@@ -74,6 +74,9 @@ class VietQRRefundRequest(BaseModel):
     transaction_id: UUID
     amount: Decimal = Field(..., gt=0)
     content: str
+    target_bank_code: str
+    target_account_no: str
+    target_account_name: Optional[str] = None
 
 class VietQRRefundResponse(BaseModel):
     status: str

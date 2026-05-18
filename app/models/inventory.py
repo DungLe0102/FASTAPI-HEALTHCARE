@@ -37,7 +37,11 @@ class Inventory(Base):
 
     medication = relationship("Medication", back_populates="inventory_batches")
 
-    __table_args__ = (Index("idx_inventory_med", "medication_id", "expiration_date"),)
+    from sqlalchemy import CheckConstraint
+    __table_args__ = (
+        Index("idx_inventory_med", "medication_id", "expiration_date"),
+        CheckConstraint("quantity >= 0", name="chk_inventory_qty_positive"),
+    )
 
 
 class Prescription(Base):

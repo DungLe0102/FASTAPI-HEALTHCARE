@@ -31,10 +31,16 @@ def check_expired_orders(db: Session):
     expired_orders = db.query(Order).filter(
         Order.status == "PENDING",
         Order.expires_at < datetime.now()
-    ).all()
+    ).with_for_update(skip_locked=True).all()
 
     for order in expired_orders:
         order.status = "CANCELLED"
+        if order.order_type == "PHARMACY":
+            from app.services.inventory_service import _restore_stock
+            items = order.order_metadata.get("items", [])
+            for item in items:
+                deducted = item.get("deducted_batches")
+                _restore_stock(db, UUID(item["medication_id"]), item["quantity"], deducted)
     
     if expired_orders:
         db.commit()
@@ -61,6 +67,12 @@ def create_order(db: Session, payload: OrderCreate) -> OrderResponse:
             )
         
         bhyt = _404(db, PatientBHYT, PatientBHYT.bhyt_id, payload.bhyt_id, "Patient BHYT")
+        
+        if not bhyt.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot extend an inactive BHYT card"
+            )
         
         total_amount = BHYT_MONTHLY_FEE * payload.extension_months
         order_metadata = {
@@ -95,12 +107,17 @@ def create_order(db: Session, payload: OrderCreate) -> OrderResponse:
             line_total = medication.price * item.quantity
             total_amount += line_total
             
+            # RESERVATION: Deduct stock immediately!
+            from app.services.inventory_service import _deduct_stock
+            deducted_batches = _deduct_stock(db, item.item_id, item.quantity)
+            
             items_data.append({
                 "medication_id": str(medication.medication_id),
                 "med_name": medication.med_name,
                 "quantity": item.quantity,
                 "price": float(medication.price),
-                "line_total": float(line_total)
+                "line_total": float(line_total),
+                "deducted_batches": deducted_batches
             })
             
         order_metadata = {"items": items_data}
@@ -149,13 +166,36 @@ def process_order_payment_webhook(db: Session, item_description: str, item_amoun
         return False
     
     order = db.query(Order).filter(Order.order_id == order_id).with_for_update().first()
-    if not order or order.status != "PENDING":
+    if not order:
         return False
         
-    # Check expiry again inside transaction
-    if order.expires_at < datetime.now():
-        order.status = "CANCELLED"
+    if order.status == "PAID":
+        # Duplicate webhook
+        return True
+        
+    if order.status == "CANCELLED":
+        # User paid after 10 mins expiry. Money received, but order is dead. Must refund.
+        order.status = "REFUND_DUE"
+        order.order_metadata["error"] = "Paid after expiration time."
         db.commit()
+        return False
+        
+    if order.status != "PENDING":
+        return False
+        
+    # Check expiry again inside transaction (just in case)
+    if order.expires_at < datetime.now():
+        order.status = "REFUND_DUE"
+        order.order_metadata["error"] = "Paid right at expiration time."
+        db.commit()
+        # Restore stock since check_expired_orders missed it
+        if order.order_type == "PHARMACY":
+            from app.services.inventory_service import _restore_stock
+            items = order.order_metadata.get("items", [])
+            for item in items:
+                deducted = item.get("deducted_batches")
+                _restore_stock(db, UUID(item["medication_id"]), item["quantity"], deducted)
+            db.commit()
         return False
 
     if Decimal(str(item_amount)) < order.total_amount:
@@ -201,18 +241,7 @@ def process_order_payment_webhook(db: Session, item_description: str, item_amoun
             })
             
     elif order.order_type == "PHARMACY":
-        # Trừ kho thuốc sau khi thanh toán thành công
-        from app.services.inventory_service import _deduct_stock
-        meta = order.order_metadata
-        items = meta.get("items", [])
-        for item in items:
-            medication_id = UUID(item["medication_id"])
-            qty = item["quantity"]
-            # Lưu ý: _deduct_stock gọi HTTPException nếu thiếu hàng, 
-            # tuy nhiên ở bước này khách đã trả tiền. Trong thực tế, nên check tồn kho 
-            # kỹ lúc tạo đơn. Ở đây nếu thiếu hàng, nó sẽ rollback giao dịch và lỗi webhook.
-            _deduct_stock(db, medication_id, qty)
-
+        # Không cần trừ kho nữa vì đã trừ (giữ chỗ) lúc tạo đơn hàng.
         notification_service.create_notification(db, {
             "recipient_id": order.patient_id,
             "recipient_type": "PATIENT",
@@ -223,3 +252,6 @@ def process_order_payment_webhook(db: Session, item_description: str, item_amoun
 
     db.commit()
     return True
+
+def get_orders(db: Session):
+    return db.query(Order).order_by(Order.created_at.desc()).all()

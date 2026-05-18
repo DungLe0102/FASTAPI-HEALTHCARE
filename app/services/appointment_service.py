@@ -94,9 +94,9 @@ def create_appointment(db: Session, payload: AppointmentCreate) -> Appointment:
         if not bhyt.is_active or bhyt.check_status != "VERIFIED":
             raise HTTPException(status_code=400, detail="BHYT card is inactive or unverified")
         
-        today = date.today()
-        if not (bhyt.valid_from <= today <= bhyt.valid_to):
-            raise HTTPException(status_code=400, detail="BHYT card is expired")
+        appt_date = schedule.start_time.date()
+        if not (bhyt.valid_from <= appt_date <= bhyt.valid_to):
+            raise HTTPException(status_code=400, detail="BHYT card is not valid on the appointment date")
 
     # 6. TẠO APPOINTMENT
     appointment = Appointment(
@@ -171,7 +171,11 @@ def update_status(
     appointment_id: UUID,
     payload       : AppointmentStatusUpdate,
 ) -> Appointment:
-    appointment = _get_appointment(db, appointment_id)
+    # Sử dụng with_for_update để khóa dòng, tránh Race Condition khi cập nhật trạng thái
+    appointment = db.query(Appointment).filter(Appointment.appointment_id == appointment_id).with_for_update().first()
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    
     current     = appointment.status
     new_status  = payload.status
 
@@ -183,8 +187,8 @@ def update_status(
             detail=f"Cannot transition from '{current}' to '{new_status}'. Allowed: {allowed}",
         )
 
-    # Khi CANCEL hoặc NO_SHOW: Hoàn trả lại slot cho Schedule
-    if new_status in ("CANCELLED", "NO_SHOW") and current in ("PENDING_PAYMENT", "SCHEDULED", "CHECKED_IN"):
+    # Khi CANCEL: Hoàn trả lại slot cho Schedule (chỉ khi chưa khám và bị hủy)
+    if new_status == "CANCELLED" and current in ("PENDING_PAYMENT", "SCHEDULED", "CHECKED_IN"):
         schedule = (
             db.query(DoctorSchedule)
             .filter(DoctorSchedule.schedule_id == appointment.schedule_id)
@@ -200,7 +204,8 @@ def update_status(
         if current in ("SCHEDULED", "CHECKED_IN") and new_status == "CANCELLED":
             from app.models.billing import Billing
             from app.services import notification_service
-            bill = db.query(Billing).filter(Billing.appointment_id == appointment.appointment_id).first()
+            # Cần khóa cả hóa đơn để tránh xung đột cập nhật
+            bill = db.query(Billing).filter(Billing.appointment_id == appointment.appointment_id).with_for_update().first()
             if bill and bill.billing_status == "PAID":
                 bill.billing_status = "REFUND_DUE"
                 notification_service.create_notification(db, {
@@ -214,7 +219,9 @@ def update_status(
     appointment.status = new_status
     db.commit()
     db.refresh(appointment)
-    return appointment
+    
+    # Lấy lại đầy đủ thông tin (joinedload) để trả về nếu cần thiết kế đầy đủ
+    return _get_appointment(db, appointment_id)
 
 # ── QUERIES ───────────────────────────────────────
 
@@ -243,9 +250,11 @@ def mark_no_shows(db: Session) -> dict:
 
     count_no_show = 0
     for appt in appointments:
-        # Tái sử dụng logic update_status để hoàn trả slot tự động
-        update_status(db, appt.appointment_id, AppointmentStatusUpdate(status="NO_SHOW"))
-        count_no_show += 1
+        try:
+            update_status(db, appt.appointment_id, AppointmentStatusUpdate(status="NO_SHOW"))
+            count_no_show += 1
+        except Exception:
+            pass
 
     # 2. Quét PENDING_PAYMENT -> CANCELLED
     expired_payments = db.query(Appointment).filter(
@@ -255,10 +264,40 @@ def mark_no_shows(db: Session) -> dict:
     
     count_cancelled = 0
     for appt in expired_payments:
-        update_status(db, appt.appointment_id, AppointmentStatusUpdate(status="CANCELLED"))
-        count_cancelled += 1
+        try:
+            update_status(db, appt.appointment_id, AppointmentStatusUpdate(status="CANCELLED"))
+            count_cancelled += 1
+        except Exception:
+            pass
 
-    return {"no_shows": count_no_show, "cancelled_expired": count_cancelled}
+    # 3. Quét CHECKED_IN và IN_PROGRESS bị kẹt từ các ngày trước (State Limbo)
+    # Tự động đóng lại để không kẹt vĩnh viễn trên hệ thống.
+    from sqlalchemy.sql import func
+    from datetime import date
+    stuck_appointments = db.query(Appointment).filter(
+        Appointment.status.in_(["CHECKED_IN", "IN_PROGRESS"]),
+        func.date(Appointment.appointment_date) < date.today()
+    ).all()
+    
+    count_resolved_limbo = 0
+    for appt in stuck_appointments:
+        try:
+            # Nếu đã có hồ sơ bệnh án, ép về COMPLETED
+            from app.models.medical_record import MedicalRecord
+            has_record = db.query(MedicalRecord).filter(MedicalRecord.appointment_id == appt.appointment_id).first()
+            if has_record:
+                update_status(db, appt.appointment_id, AppointmentStatusUpdate(status="COMPLETED"))
+            else:
+                update_status(db, appt.appointment_id, AppointmentStatusUpdate(status="NO_SHOW"))
+            count_resolved_limbo += 1
+        except Exception:
+            pass
+
+    return {
+        "no_show_marked": count_no_show,
+        "cancelled_expired_payments": count_cancelled,
+        "resolved_limbo_states": count_resolved_limbo
+    }
 
 def get_appointments_by_patient(
     db: Session,
