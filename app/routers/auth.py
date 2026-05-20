@@ -12,6 +12,7 @@ Luồng sử dụng:
 
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
+import jwt
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -25,10 +26,12 @@ from app.schemas.account import (
     Token, ChangePasswordRequest, UpdateMe,
     UserRegister, NewPassword, Message,
     ForgotPasswordRequest, VerifyResetOTPRequest, VerifyResetOTPResponse,
+    RefreshRequest, ResendOTPRequest,
 )
 from app.security import (
     get_password_hash, hash_password, verify_password,
     create_access_token, get_current_active_superuser, CurrentAccount,
+    create_refresh_token, ALGORITHM,
 )
 from app.config import settings
 from app.utils import (
@@ -86,11 +89,59 @@ def login(
     db.commit()
 
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    refresh_token_expires = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     return Token(
         access_token=create_access_token(
             subject=str(account.account_id),
             expires_delta=access_token_expires,
             role=account.role,
+        ),
+        refresh_token=create_refresh_token(
+            subject=str(account.account_id),
+            expires_delta=refresh_token_expires,
+        ),
+        role=account.role,
+        account_id=str(account.account_id),
+    )
+
+
+@router.post(
+    "/refresh-token",
+    response_model=Token,
+    summary="Làm mới access token bằng refresh token",
+)
+def refresh_token(payload: RefreshRequest, db: Session = Depends(get_db)):
+    try:
+        decoded = jwt.decode(payload.refresh_token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        if decoded.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        account_id = decoded.get("sub")
+        if not account_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+    
+    try:
+        subject_uuid = UUID(account_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=401, detail="Invalid account format")
+
+    account = db.query(Account).filter(Account.account_id == subject_uuid).first()
+    if not account or not account.is_active:
+        raise HTTPException(status_code=401, detail="Account not found or inactive")
+
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    refresh_token_expires = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    
+    return Token(
+        access_token=create_access_token(
+            subject=str(account.account_id),
+            expires_delta=access_token_expires,
+            role=account.role,
+        ),
+        refresh_token=create_refresh_token(
+            subject=str(account.account_id),
+            expires_delta=refresh_token_expires,
         ),
         role=account.role,
         account_id=str(account.account_id),
@@ -269,6 +320,24 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
         email_data = generate_reset_otp_email(email_to=account.email, otp=otp, full_name=account.full_name)
         send_email(email_to=account.email, subject=email_data.subject, html_content=email_data.html_content)
     return Message(message="Nếu email này đã đăng ký, chúng tôi đã gửi mã OTP reset mật khẩu")
+
+
+@router.post(
+    "/resend-otp",
+    response_model=Message,
+    summary="Gửi lại mã OTP reset mật khẩu",
+)
+def resend_otp(payload: ResendOTPRequest, db: Session = Depends(get_db)):
+    account = db.query(Account).filter(Account.email == payload.email).first()
+    if account and settings.emails_enabled:
+        otp = generate_otp()
+        account.otp_code = otp
+        account.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        account.otp_purpose = "RESET_PASSWORD"
+        db.commit()
+        email_data = generate_reset_otp_email(email_to=account.email, otp=otp, full_name=account.full_name)
+        send_email(email_to=account.email, subject=email_data.subject, html_content=email_data.html_content)
+    return Message(message="Nếu email này đã đăng ký, chúng tôi đã gửi lại mã OTP reset mật khẩu")
 
 
 @router.post(

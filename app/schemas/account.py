@@ -77,6 +77,7 @@ class Token(BaseModel):
     """Trả về từ /login — bổ sung role & account_id để frontend dùng ngay."""
     access_token: str
     token_type: str = "bearer"
+    refresh_token: Optional[str] = None
     role: Optional[str] = None          # ADMIN | PATIENT
     account_id: Optional[str] = None    # UUID dạng string
 
@@ -85,11 +86,16 @@ class Token(BaseModel):
             "example": {
                 "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                 "token_type": "bearer",
+                "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI...",
                 "role": "ADMIN",
                 "account_id": "a1b2c3d4-e5f6-7g8h-9i0j-k1l2m3n4o5p6"
             }
         }
     }
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
 
 
 # Giữ alias cũ để không cần sửa các router khác
@@ -129,3 +135,7 @@ class VerifyResetOTPRequest(BaseModel):
 class VerifyResetOTPResponse(BaseModel):
     reset_token: str
     message: str
+
+
+class ResendOTPRequest(BaseModel):
+    email: EmailStr = Field(..., examples=["nguyenvana@gmail.com"])

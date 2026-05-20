@@ -79,6 +79,13 @@ def create_access_token(subject: str | Any, expires_delta: timedelta, role: str 
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
+def create_refresh_token(subject: str | Any, expires_delta: timedelta) -> str:
+    """Create a JWT refresh token."""
+    expire = datetime.now(timezone.utc) + expires_delta
+    to_encode: dict[str, Any] = {"exp": expire, "sub": str(subject), "type": "refresh"}
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
+
+
 def generate_password_reset_token(email: str) -> str:
     from app.utils import generate_password_reset_token as _gen
     return _gen(email)
