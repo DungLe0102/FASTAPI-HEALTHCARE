@@ -23,11 +23,13 @@ class DoctorCreate(DoctorBase):
 
 
 class DoctorUpdate(BaseModel):
-    first_name     : Optional[str]  = Field(None, max_length=100)
-    last_name      : Optional[str]  = Field(None, max_length=100)
-    specialization : Optional[str]  = Field(None, max_length=100)
-    department_id  : Optional[UUID] = None
-    is_active      : Optional[bool] = None
+    first_name              : Optional[str]  = Field(None, max_length=100)
+    last_name               : Optional[str]  = Field(None, max_length=100)
+    specialization          : Optional[str]  = Field(None, max_length=100)
+    department_id           : Optional[UUID] = None
+    hourly_consultation_fee : Optional[int]  = Field(None, ge=0)
+    is_active               : Optional[bool] = None
+    is_simulator            : Optional[bool] = None
 
 
 class DoctorResponse(DoctorBase):
