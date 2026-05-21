@@ -60,13 +60,15 @@ class ScheduleBase(BaseModel):
     def validate_times(self):
         if self.end_time <= self.start_time:
             raise ValueError("end_time must be after start_time")
-        if self.start_time < datetime.now():
-            raise ValueError("Cannot create a schedule in the past")
         return self
 
 
 class ScheduleCreate(ScheduleBase):
-    pass
+    @model_validator(mode="after")
+    def validate_future(self):
+        if self.start_time < datetime.now():
+            raise ValueError("Cannot create a schedule in the past")
+        return self
 
 
 class ScheduleUpdate(BaseModel):
@@ -84,10 +86,17 @@ class ScheduleUpdate(BaseModel):
         return self
 
 
+class ScheduleRoom(BaseModel):
+    room_id: UUID
+    room_number: str
+    room_type: str
+    model_config = ConfigDict(from_attributes=True)
+
 class ScheduleResponse(ScheduleBase):
     schedule_id    : UUID
     current_booked : int
     status         : str
+    room           : Optional[ScheduleRoom] = None
 
     model_config = ConfigDict(from_attributes=True)
 
