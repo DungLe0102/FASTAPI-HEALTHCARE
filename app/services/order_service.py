@@ -40,7 +40,9 @@ def check_expired_orders(db: Session):
             items = order.order_metadata.get("items", [])
             for item in items:
                 deducted = item.get("deducted_batches")
-                _restore_stock(db, UUID(item["medication_id"]), item["quantity"], deducted)
+                med_id = item.get("medication_id")
+                if med_id:
+                    _restore_stock(db, UUID(med_id), item.get("quantity", 0), deducted)
     
     if expired_orders:
         db.commit()
