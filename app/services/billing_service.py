@@ -254,6 +254,15 @@ def process_vietqr_webhook(db: Session, payload: VietQRWebhookPayload):
         # 1. Trích xuất transaction_id từ nội dung chuyển khoản bằng Regex
         match = re.search(r"PAY\s+([a-fA-F0-9\-]{36})", item.description)
         if not match:
+            # Kiểm tra nếu là thanh toán đơn hàng (PAYORD)
+            if "PAYORD" in item.description:
+                from app.services import order_service
+                order_service.process_order_payment_webhook(
+                    db,
+                    item.description,
+                    float(item.amount),
+                    item.reference_number
+                )
             continue
         try:
             txn_id = UUID(match.group(1))
