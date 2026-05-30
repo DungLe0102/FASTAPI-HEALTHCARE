@@ -128,4 +128,4 @@ class AppointmentDetailResponse(AppointmentResponse):
 
 class AppointmentListResponse(BaseModel):
     total       : int
-    appointments: List[AppointmentResponse]
+    appointments: List[AppointmentDetailResponse]

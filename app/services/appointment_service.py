@@ -309,7 +309,11 @@ def get_appointments_by_patient(
     """Danh sách cuộc hẹn của một bệnh nhân (phân trang, lọc status)."""
     _get_or_404(db, Patient, Patient.patient_id, patient_id, "Patient")
 
-    query = db.query(Appointment).filter(Appointment.patient_id == patient_id)
+    query = db.query(Appointment).options(
+        joinedload(Appointment.patient),
+        joinedload(Appointment.doctor),
+        joinedload(Appointment.applied_bhyt)
+    ).filter(Appointment.patient_id == patient_id)
     if status_filter:
         query = query.filter(Appointment.status == status_filter)
 
@@ -320,6 +324,11 @@ def get_appointments_by_patient(
         .limit(limit)
         .all()
     )
+    for appt in appointments:
+        appt.doctor_name    = f"{appt.doctor.last_name} {appt.doctor.first_name}" if appt.doctor else "Bác sĩ"
+        appt.patient_name   = f"{appt.patient.last_name} {appt.patient.first_name}" if appt.patient else "Bệnh nhân"
+        appt.specialization = appt.doctor.specialization if appt.doctor else None
+        appt.bhyt_code      = appt.applied_bhyt.bhyt_code if appt.applied_bhyt else None
     return {"total": total, "appointments": appointments}
 
 
@@ -334,7 +343,11 @@ def get_appointments_by_doctor(
     """Danh sách cuộc hẹn của một bác sĩ (lọc theo ngày / status)."""
     _get_or_404(db, Doctor, Doctor.doctor_id, doctor_id, "Doctor")
 
-    query = db.query(Appointment).filter(Appointment.doctor_id == doctor_id)
+    query = db.query(Appointment).options(
+        joinedload(Appointment.patient),
+        joinedload(Appointment.doctor),
+        joinedload(Appointment.applied_bhyt)
+    ).filter(Appointment.doctor_id == doctor_id)
     if date_filter:
         day_start = datetime.combine(date_filter, datetime.min.time())
         day_end = datetime.combine(date_filter, datetime.max.time())
@@ -352,6 +365,11 @@ def get_appointments_by_doctor(
         .limit(limit)
         .all()
     )
+    for appt in appointments:
+        appt.doctor_name    = f"{appt.doctor.last_name} {appt.doctor.first_name}" if appt.doctor else "Bác sĩ"
+        appt.patient_name   = f"{appt.patient.last_name} {appt.patient.first_name}" if appt.patient else "Bệnh nhân"
+        appt.specialization = appt.doctor.specialization if appt.doctor else None
+        appt.bhyt_code      = appt.applied_bhyt.bhyt_code if appt.applied_bhyt else None
     return {"total": total, "appointments": appointments}
 
 
@@ -359,7 +377,8 @@ def get_appointments_today(db: Session, doctor_id: Optional[UUID] = None) -> Lis
     today = date.today()
     query = db.query(Appointment).options(
         joinedload(Appointment.patient),
-        joinedload(Appointment.doctor)
+        joinedload(Appointment.doctor),
+        joinedload(Appointment.applied_bhyt)
     ).filter(
         Appointment.appointment_date >= datetime.combine(today, datetime.min.time()),
         Appointment.appointment_date <= datetime.combine(today, datetime.max.time()),
@@ -368,4 +387,10 @@ def get_appointments_today(db: Session, doctor_id: Optional[UUID] = None) -> Lis
     if doctor_id:
         query = query.filter(Appointment.doctor_id == doctor_id)
     
-    return query.order_by(Appointment.appointment_date).all()
+    appts = query.order_by(Appointment.appointment_date).all()
+    for appt in appts:
+        appt.doctor_name    = f"{appt.doctor.last_name} {appt.doctor.first_name}" if appt.doctor else "Bác sĩ"
+        appt.patient_name   = f"{appt.patient.last_name} {appt.patient.first_name}" if appt.patient else "Bệnh nhân"
+        appt.specialization = appt.doctor.specialization if appt.doctor else None
+        appt.bhyt_code      = appt.applied_bhyt.bhyt_code if appt.applied_bhyt else None
+    return appts

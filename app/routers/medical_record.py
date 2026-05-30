@@ -319,4 +319,4 @@ def sign_record(
 
     Mỗi bệnh án chỉ được ký 1 lần.
     """
-    return svc.sign_record(db, record_id, payload)
+    return svc.sign_record(db, record_id, payload, current_acc.account_id)
